@@ -2,6 +2,7 @@ package loginsystem;
 
 import javax.swing.*;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -17,6 +18,10 @@ public class ChatApp {
     // Message Information
     private boolean loggedIn = false;
     private final List<Message> sentMessages = new ArrayList<>();
+    private final List<Message> disregardedMessages = new ArrayList<>();
+    private final List<Message> storedMessages = new ArrayList<>();
+    private final List<String> messageHashes = new ArrayList<>();
+    private final List<String> messageIDs = new ArrayList<>();
     private int messageCounter = 0;
 
     // User class to store user details
@@ -43,33 +48,32 @@ public class ChatApp {
         String recipient;
         String message;
         String messageHash;
+        String flag;
 
-        public Message(String messageID, int messageNumber, String recipient, String message, String messageHash) {
+        public Message(String messageID, int messageNumber, String recipient, String message, String messageHash, String flag) {
             this.messageID = messageID;
             this.messageNumber = messageNumber;
             this.recipient = recipient;
             this.message = message;
             this.messageHash = messageHash;
+            this.flag = flag;
         }
 
         @Override
         public String toString() {
-            return String.format("ID: %s | Num: %d | Recipient: %s | Message: %s | Hash: %s",
-                    messageID, messageNumber, recipient, message, messageHash);
+            return String.format("ID: %s | Num: %d | Recipient: %s | Message: %s | Hash: %s | Flag: %s",
+                    messageID, messageNumber, recipient, message, messageHash, flag);
         }
     }
 
     @SuppressWarnings("empty-statement")
     public static void main(String[] args) {
-        // Set look and feel for better appearance
         ; // Use default look and feel if system look and feel fails
-
         ChatApp app = new ChatApp();
         app.runApplication();
     }
 
     private void runApplication() {
-        // Show welcome message
         JOptionPane.showMessageDialog(null, """
                                             Welcome to the ChatApp!
                                             
@@ -81,10 +85,8 @@ public class ChatApp {
                                             Please follow the prompts to continue.""",
                 "Welcome", JOptionPane.INFORMATION_MESSAGE);
 
-        // Registration process
         performRegistration();
 
-        // Login process if registration was successful
         if (isUserRegistered()) {
             performLogin();
         } else {
@@ -94,24 +96,25 @@ public class ChatApp {
             return;
         }
 
-        // Proceed to chat interface if logged in
         if (loggedIn) {
             JOptionPane.showMessageDialog(null, "Welcome to the ChatApp.", "Welcome", JOptionPane.INFORMATION_MESSAGE);
             int maxMessages = promptForMaxMessages();
+            populateTestData(); // Populate test data
             runChatInterface(maxMessages);
         }
     }
 
     private void performRegistration() {
-        String registrationMessage = "=== USER REGISTRATION ===\n\n" +
-                "Please provide the following information:\n" +
-                "• First and Last Name\n" +
-                "• Username (must contain '_' and be ≤ 5 characters)\n" +
-                "• Password (≥ 8 chars, uppercase, lowercase, digit, special char)\n" +
-                "• South African phone number (+27xxxxxxxxx)";
+        String registrationMessage = """
+                                     === USER REGISTRATION ===
+                                     
+                                     Please provide the following information:
+                                     \u2022 First and Last Name
+                                     \u2022 Username (must contain '_' and be \u2264 5 characters)
+                                     \u2022 Password (\u2265 8 chars, uppercase, lowercase, digit, special char)
+                                     \u2022 South African phone number (+27xxxxxxxxx)""";
         JOptionPane.showMessageDialog(null, registrationMessage, "Registration", JOptionPane.INFORMATION_MESSAGE);
 
-        // Get user inputs
         firstname = getValidInput("Enter First Name:", "First Name", false);
         if (firstname == null) return;
 
@@ -127,39 +130,29 @@ public class ChatApp {
         phone = getValidInput("Enter Phone Number (format: +27xxxxxxxxx):", "Phone Number", false);
         if (phone == null) return;
 
-        // Validate inputs
         boolean validatePhone = checkCellPhoneNumber(phone);
         boolean validateUsername = checkUserName(username);
         boolean validatePassword = checkPasswordComplexity(password);
 
-        // Show validation results
         StringBuilder validationResults = new StringBuilder("Validation Results:\n\n");
-        if (validateUsername) {
-            validationResults.append("✓ Username: Valid\n");
-        } else {
-            validationResults.append("✗ Username: Invalid (must contain '_' and be ≤ 5 characters)\n");
-        }
-        if (validatePassword) {
-            validationResults.append("✓ Password: Valid\n");
-        } else {
-            validationResults.append("✗ Password: Invalid (must be ≥ 8 chars with uppercase, lowercase, digit, and special character)\n");
-        }
-        if (validatePhone) {
-            validationResults.append("✓ Phone Number: Valid\n");
-        } else {
-            validationResults.append("✗ Phone Number: Invalid (must be +27 followed by 9 digits, starting with 6, 7, or 8)\n");
-        }
+        if (validateUsername) validationResults.append("✓ Username: Valid\n");
+        else validationResults.append("✗ Username: Invalid (must contain '_' and be ≤ 5 characters)\n");
+        if (validatePassword) validationResults.append("✓ Password: Valid\n");
+        else validationResults.append("✗ Password: Invalid (must be ≥ 8 chars with uppercase, lowercase, digit, and special character)\n");
+        if (validatePhone) validationResults.append("✓ Phone Number: Valid\n");
+        else validationResults.append("✗ Phone Number: Invalid (must be +27 followed by 9 digits, starting with 6, 7, or 8)\n");
 
         JOptionPane.showMessageDialog(null, validationResults.toString(), "Validation Results",
                 (validateUsername && validatePassword && validatePhone) ? JOptionPane.INFORMATION_MESSAGE : JOptionPane.WARNING_MESSAGE);
 
-        // Register user if all validations pass
         if (validateUsername && validatePassword && validatePhone) {
             String registrationResult = registerUser(username, password, phone);
             if (registrationResult.equals("User is successfully registered.")) {
                 JOptionPane.showMessageDialog(null,
-                        "🎉 Registration Successful! 🎉\n\n" +
-                                "User: " + firstname + " " + lastname + "\n" +
+                        """
+                        \ud83c\udf89 Registration Successful! \ud83c\udf89
+                        
+                        User: """ + firstname + " " + lastname + "\n" +
                                 "Username: " + username + "\n" +
                                 "Phone: " + phone + "\n\n" +
                                 "You can now proceed to login.",
@@ -177,9 +170,10 @@ public class ChatApp {
     }
 
     private void performLogin() {
-        JOptionPane.showMessageDialog(null,
-                "=== USER LOGIN ===\n\n" +
-                        "Please enter your credentials to login.",
+        JOptionPane.showMessageDialog(null, """
+                                            === USER LOGIN ===
+                                            
+                                            Please enter your credentials to login.""",
                 "Login", JOptionPane.INFORMATION_MESSAGE);
 
         int maxAttempts = 3;
@@ -195,11 +189,12 @@ public class ChatApp {
             if (loginUser(loginUsername, loginPassword)) {
                 loggedIn = true;
                 JOptionPane.showMessageDialog(null,
-                        "🎉 Login Successful! 🎉\n\n" +
-                                "Welcome back, " + firstname + " " + lastname + "!\n" +
+                        """
+                        \ud83c\udf89 Login Successful! \ud83c\udf89
+                        
+                        Welcome back, """ + firstname + " " + lastname + "!\n" +
                                 "It's great to see you again.\n\n" +
-                                "Login Time: " + LocalDateTime.now().format(
-                                DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
+                                "Login Time: " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
                         "Login Success", JOptionPane.INFORMATION_MESSAGE);
                 return;
             } else {
@@ -207,15 +202,18 @@ public class ChatApp {
                 int remaining = maxAttempts - attempts;
                 if (remaining > 0) {
                     JOptionPane.showMessageDialog(null,
-                            "Login Failed!\n\n" +
-                                    "Invalid username or password.\n" +
-                                    "Attempts remaining: " + remaining,
+                            """
+                            Login Failed!
+                            
+                            Invalid username or password.
+                            Attempts remaining: """ + remaining,
                             "Login Failed", JOptionPane.ERROR_MESSAGE);
                 } else {
-                    JOptionPane.showMessageDialog(null,
-                            "Login Failed!\n\n" +
-                                    "Maximum login attempts exceeded.\n" +
-                                    "Please restart the application to try again.",
+                    JOptionPane.showMessageDialog(null, """
+                                                        Login Failed!
+                                                        
+                                                        Maximum login attempts exceeded.
+                                                        Please restart the application to try again.""",
                             "Login Locked", JOptionPane.ERROR_MESSAGE);
                 }
             }
@@ -225,10 +223,17 @@ public class ChatApp {
     private void runChatInterface(int maxMessages) {
         boolean running = true;
         while (running) {
-            String menu = "Please choose an option:\n" +
-                    "1) Send Messages\n" +
-                    "2) Show recently sent messages\n" +
-                    "3) Quit";
+            String menu = """
+                          Please choose an option:
+                          1) Send Messages
+                          2) Show recently sent messages
+                          3) Display sender and recipient of all sent messages
+                          4) Display the longest sent message
+                          5) Search for a message ID
+                          6) Search for all messages sent to a recipient
+                          7) Delete a message using message hash
+                          8) Display a report of all sent messages
+                          9) Quit""";
             String choice = JOptionPane.showInputDialog(null, menu, "Main Menu", JOptionPane.QUESTION_MESSAGE);
 
             if (choice == null) {
@@ -237,22 +242,25 @@ public class ChatApp {
             }
 
             switch (choice.trim()) {
-                case "1":
+                case "1" -> {
                     if (!loggedIn) {
                         JOptionPane.showMessageDialog(null, "You must be logged in to send messages.", "Error", JOptionPane.ERROR_MESSAGE);
                     } else {
                         sendMessages(maxMessages);
                     }
-                    break;
-                case "2":
-                    showRecentMessages();
-                    break;
-                case "3":
+                }
+                case "2" -> showRecentMessages();
+                case "3" -> displaySenderRecipient();
+                case "4" -> displayLongestMessage();
+                case "5" -> searchByMessageID();
+                case "6" -> searchByRecipient();
+                case "7" -> deleteMessageByHash();
+                case "8" -> displayReport();
+                case "9" -> {
                     JOptionPane.showMessageDialog(null, "Goodbye!", "Exit", JOptionPane.INFORMATION_MESSAGE);
                     running = false;
-                    break;
-                default:
-                    JOptionPane.showMessageDialog(null, "Invalid option. Please enter 1, 2, or 3.", "Error", JOptionPane.ERROR_MESSAGE);
+                }
+                default -> JOptionPane.showMessageDialog(null, "Invalid option. Please enter 1-9.", "Error", JOptionPane.ERROR_MESSAGE);
             }
         }
     }
@@ -378,8 +386,10 @@ public class ChatApp {
 
             String messageHash = generateMessageHash(messageID, messageCounter, recipient, messageText);
 
-            Message msg = new Message(messageID, messageCounter, recipient, messageText, messageHash);
+            Message msg = new Message(messageID, messageCounter, recipient, messageText, messageHash, "Sent");
             sentMessages.add(msg);
+            messageHashes.add(messageHash);
+            messageIDs.add(messageID);
 
             JOptionPane.showMessageDialog(null, "Message sent successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
 
@@ -445,7 +455,7 @@ public class ChatApp {
                 hexString.append(String.format("%02x", b));
             }
             return hexString.toString();
-        } catch (Exception e) {
+        } catch (NoSuchAlgorithmException e) {
             return "hash_error_" + System.currentTimeMillis();
         }
     }
@@ -467,5 +477,116 @@ public class ChatApp {
 
     private boolean isUserRegistered() {
         return !users.isEmpty();
+    }
+
+    // Populate test data
+    private void populateTestData() {
+        String[][] testData = {
+            {"+27834567896", "Did you get the cake?", "Sent"},
+            {"+2783844567", "Where are you? You are late! I have asked you to be on time.", "Stored"},
+            {"+2783444567", "Yahooo, I am at your gate.", "Disregarded"},
+            {"Developer", "It is dinner time!", "Sent"},
+            {"+2783844567", "Ok, I am leaving without you.", "Stored"}
+        };
+
+        for (int i = 0; i < testData.length; i++) {
+            String recipient = testData[i][0];
+            String message = testData[i][1];
+            String flag = testData[i][2];
+            String messageID = generateUniqueMessageID();
+            messageCounter++;
+            String messageHash = generateMessageHash(messageID, messageCounter, recipient, message);
+
+            Message msg = new Message(messageID, messageCounter, recipient, message, messageHash, flag);
+            if ("Sent".equals(flag)) sentMessages.add(msg);
+            else if ("Disregarded".equals(flag)) disregardedMessages.add(msg);
+            else if ("Stored".equals(flag)) storedMessages.add(msg);
+            messageHashes.add(messageHash);
+            messageIDs.add(messageID);
+        }
+    }
+
+    // Implement required functions
+    private void displaySenderRecipient() {
+        if (sentMessages.isEmpty()) {
+            JOptionPane.showMessageDialog(null, "No sent messages to display.", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        StringBuilder sb = new StringBuilder("Sender and Recipient of Sent Messages:\n\n");
+        for (Message msg : sentMessages) {
+            sb.append("Sender: ").append(username).append(" | Recipient: ").append(msg.recipient).append("\n");
+        }
+        JOptionPane.showMessageDialog(null, sb.toString(), "Sender/Recipient", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private void displayLongestMessage() {
+        if (sentMessages.isEmpty()) {
+            JOptionPane.showMessageDialog(null, "No sent messages to display.", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        Message longest = sentMessages.get(0);
+        for (Message msg : sentMessages) {
+            if (msg.message.length() > longest.message.length()) {
+                longest = msg;
+            }
+        }
+        JOptionPane.showMessageDialog(null, "Longest Message:\n\nRecipient: " + longest.recipient + "\nMessage: " + longest.message,
+                "Longest Message", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private void searchByMessageID() {
+        String id = getValidInput("Enter Message ID to search:", "Search by ID", false);
+        if (id == null) return;
+        for (Message msg : sentMessages) {
+            if (msg.messageID.equals(id)) {
+                JOptionPane.showMessageDialog(null, "Found:\nRecipient: " + msg.recipient + "\nMessage: " + msg.message,
+                        "Search Result", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+        }
+        JOptionPane.showMessageDialog(null, "Message ID not found.", "Search Result", JOptionPane.WARNING_MESSAGE);
+    }
+
+    private void searchByRecipient() {
+        String recipient = getValidInput("Enter Recipient to search:", "Search by Recipient", false);
+        if (recipient == null) return;
+        StringBuilder sb = new StringBuilder("Messages for Recipient " + recipient + ":\n\n");
+        boolean found = false;
+        for (Message msg : sentMessages) {
+            if (msg.recipient.equals(recipient)) {
+                sb.append("Message: ").append(msg.message).append("\n");
+                found = true;
+            }
+        }
+        if (!found) sb.append("No messages found for this recipient.");
+        JOptionPane.showMessageDialog(null, sb.toString(), "Search Result", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private void deleteMessageByHash() {
+        String hash = getValidInput("Enter Message Hash to delete:", "Delete by Hash", false);
+        if (hash == null) return;
+        for (int i = 0; i < sentMessages.size(); i++) {
+            if (sentMessages.get(i).messageHash.equals(hash)) {
+                sentMessages.remove(i);
+                messageHashes.remove(hash);
+                JOptionPane.showMessageDialog(null, "Message with hash " + hash + " deleted successfully.", "Delete Result", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+        }
+        JOptionPane.showMessageDialog(null, "Message hash not found.", "Delete Result", JOptionPane.WARNING_MESSAGE);
+    }
+
+    private void displayReport() {
+        if (sentMessages.isEmpty()) {
+            JOptionPane.showMessageDialog(null, "No sent messages to report.", "Report", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        StringBuilder sb = new StringBuilder("Full Report of Sent Messages:\n\n");
+        for (Message msg : sentMessages) {
+            sb.append("Message Hash: ").append(msg.messageHash).append("\n");
+            sb.append("Recipient: ").append(msg.recipient).append("\n");
+            sb.append("Message: ").append(msg.message).append("\n\n");
+        }
+        JOptionPane.showMessageDialog(null, sb.toString(), "Report", JOptionPane.INFORMATION_MESSAGE);
     }
 }
